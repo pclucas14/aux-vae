@@ -7,11 +7,13 @@ from torch.autograd import Variable
 from torch.nn.utils import weight_norm as wn
 import numpy as np
 
+NORM = 'weight_norm'
+
 class nin(nn.Module):
     def __init__(self, dim_in, dim_out):
         super(nin, self).__init__()
-        # self.lin_a = wn(nn.Linear(dim_in, dim_out))
-        self.lin_a = nn.Linear(dim_in, dim_out)
+        self.lin_a = wn(nn.Linear(dim_in, dim_out))
+        # self.lin_a = nn.Linear(dim_in, dim_out)
         self.dim_out = dim_out
     
     def forward(self, x):
@@ -26,6 +28,51 @@ class nin(nn.Module):
         out = out.view(shp)
         return out.permute(0, 3, 1, 2)
 
+
+class deconv2d_norm(nn.Module):
+    def __init__(self, num_filters_in, num_filters_out, filter_size=3, stride=1, norm=NORM):
+        super(deconv2d_norm, self).__init__()
+        if stride == 2 and filter_size % 2 == 1 : 
+            filter_size += 1
+        
+        pad = (filter_size - 1) / 2 if stride == 1 else filter_size / 2 - 1
+        self.deconv = nn.ConvTranspose2d(num_filters_in, num_filters_out, filter_size, stride, pad)
+        self.norm = norm
+        if norm == 'batch_norm':
+            self.bn = nn.BatchNorm2d(num_filters_out)
+        elif norm == 'weight_norm':
+            self.deconv = wn(self.deconv)
+
+    def forward(self, x):
+        x = self.deconv(x)
+        if self.norm == 'batch_norm':
+            x = self.bn(x)
+        
+        return x
+    
+
+class conv2d_norm(nn.Module):
+    def __init__(self, num_filters_in, num_filters_out, filter_size=3, stride=1, norm=NORM):
+        super(conv2d_norm, self).__init__()
+        if stride == 2 and filter_size % 2 == 1 : 
+            filter_size += 1
+        
+        pad = (filter_size - 1) / 2 if stride == 1 else filter_size / 2 - 1
+        self.conv = nn.Conv2d(num_filters_in, num_filters_out, filter_size, stride, pad)
+        self.norm = norm
+        if norm == 'batch_norm':
+            self.bn = nn.BatchNorm2d(num_filters_out)
+        elif norm == 'weight_norm':
+            self.conv = wn(self.conv)
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.norm == 'batch_norm':
+            x = self.bn(x)
+        
+        return x
+        
+         
 
 class down_shifted_conv2d(nn.Module):
     def __init__(self, num_filters_in, num_filters_out, filter_size=(2,3), stride=(1,1), 
@@ -141,4 +188,7 @@ class gated_resnet(nn.Module):
         x = self.conv_out(x)
         a, b = torch.chunk(x, 2, dim=1)
         c3 = a * F.sigmoid(b)
-        return og_x + c3
+        try : 
+            return og_x + c3
+        except : 
+            pdb.set_trace()
