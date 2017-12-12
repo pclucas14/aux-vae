@@ -76,7 +76,7 @@ class conv2d_norm(nn.Module):
 
 class down_shifted_conv2d(nn.Module):
     def __init__(self, num_filters_in, num_filters_out, filter_size=(2,3), stride=(1,1), 
-                    shift_output_down=False, norm='weight_norm'):
+                    shift_output_down=False, norm=NORM):
         super(down_shifted_conv2d, self).__init__()
         
         assert norm in [None, 'batch_norm', 'weight_norm']
@@ -104,18 +104,29 @@ class down_shifted_conv2d(nn.Module):
 
 
 class down_shifted_deconv2d(nn.Module):
-    def __init__(self, num_filters_in, num_filters_out, filter_size=(2,3), stride=(1,1)):
+    def __init__(self, num_filters_in, num_filters_out, filter_size=(2,3), stride=(1,1), 
+                    norm=NORM):
         super(down_shifted_deconv2d, self).__init__()
-        self.deconv = wn(nn.ConvTranspose2d(num_filters_in, num_filters_out, filter_size, stride, 
-                                            output_padding=1))
+        self.deconv = nn.ConvTranspose2d(num_filters_in, num_filters_out, filter_size, stride, 
+                                            output_padding=1)
         self.filter_size = filter_size
         self.stride = stride
+        self.norm = norm
+
+        if norm == 'weight_norm':
+            self.deconv = wn(self.deconv)
+        elif norm == 'batch_norm':
+            self.bn = nn.BatchNorm2d(num_filters_out)
 
     def forward(self, x):
         x = self.deconv(x)
         xs = [int(y) for y in x.size()]
-        return x[:, :, :(xs[2] - self.filter_size[0] + 1), 
+        x =  x[:, :, :(xs[2] - self.filter_size[0] + 1), 
                  int((self.filter_size[1] - 1) / 2):(xs[3] - int((self.filter_size[1] - 1) / 2))]
+        if self.norm == 'batch_norm':
+            x = self.bn(x)
+
+        return x
 
 
 class down_right_shifted_conv2d(nn.Module):
